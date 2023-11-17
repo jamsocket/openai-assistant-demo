@@ -1,0 +1,12 @@
+{
+  "name": "whiteboard-session-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openai": "^4.18.0",
+    "socket.io": "^4.6.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.6"
+  }
+}
