@@ -3,7 +3,7 @@ import type { Shape } from '../types'
 import OpenAI from 'openai'
 console.log('here')
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY})
+const openai = new OpenAI({ apiKey: "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"})
 
 const assistant = await openai.beta.assistants.create({
   instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a whiteboard.",
@@ -28,15 +28,6 @@ const assistant = await openai.beta.assistants.create({
 });
 
 const thread = await openai.beta.threads.create();
-
-const message = await openai.beta.threads.messages.create(
-thread.id,
-{
-  role: "user",
-  content: "Draw a rectangle 100 x 100 pixels large at position [-56, -125]."
-}
-)
-console.log("message", message)
 
 const run = await openai.beta.threads.runs.create(
 thread.id,
@@ -120,9 +111,16 @@ io.on('connection', async (socket: Socket) => {
   })
 
 
-
-
-
+  socket.on('create-message', async (message) => {
+    console.log(message)
+    await openai.beta.threads.messages.create(
+      thread.id,
+      {
+        role: "user",
+        content: message
+      }
+    )
+  })
 
   socket.on('create-shape', async (shape) => {
     shapes.push(shape)

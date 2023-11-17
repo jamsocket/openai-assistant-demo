@@ -7,6 +7,7 @@ import { AvatarList, Spinner, Whiteboard } from './Whiteboard'
 import type { Shape, User } from '../types'
 import { SessionBackendProvider, useEventListener, useReady, useSend } from '@jamsocket/javascript/react'
 import type { SpawnResult } from '@jamsocket/javascript/types'
+import Chat from './Chat';
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
   return <SessionBackendProvider spawnResult={spawnResult}>
@@ -69,6 +70,7 @@ function Home() {
             }}
           />
         ) : <Spinner />}
+        <Chat/>
       </Content>
     </main>
   )
