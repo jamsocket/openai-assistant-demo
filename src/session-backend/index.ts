@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 const openai = new OpenAI({ apiKey: "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"})
 
 const assistant = await openai.beta.assistants.create({
-  instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a whiteboard.",
+  instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.",
   model: "gpt-4-1106-preview",
   tools: [{
     "type": "function",
@@ -19,6 +19,7 @@ const assistant = await openai.beta.assistants.create({
           "y": {"type": "number", "description": "y position"},
           "w": {"type": "number", "description": "width of rectangle"},
           "h": {"type": "number", "description": "height of rectangle"},
+          "color": {"type": "string", "description": "hsl(_, _%, _%) if a color isn't specified, just use black."}
         },
         "required": ["x", "y", "w", "h"]
       }
@@ -113,7 +114,6 @@ io.on('connection', async (socket: Socket) => {
     socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
   })
 
-
   socket.on('create-message', async (message) => {
     console.log(message)
     await openai.beta.threads.messages.create(
@@ -123,11 +123,12 @@ io.on('connection', async (socket: Socket) => {
         content: message
       }
     )
+    pollRun();
+    socket.broadcast.emit('snapshot', shapes)
   })
 
   socket.on('create-shape', async (shape) => {
     shapes.push(shape)
-    pollRun();
     socket.broadcast.emit('snapshot', shapes)
   })
 
