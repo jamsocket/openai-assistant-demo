@@ -1,5 +1,5 @@
 module.exports = {
   dockerfile: './Dockerfile.jamsocket',
-  service: 'whiteboard-demo',
+  service: 'openai-assistant-demo',
   watch: ['./src/session-backend'],
 }
