@@ -1,5 +1,5 @@
 {
-  "name": "whiteboard-session-backend",
+  "name": "openai-session-backend",
   "private": true,
   "type": "module",
   "dependencies": {
