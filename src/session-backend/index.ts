@@ -1,9 +1,8 @@
 import { Server, type Socket } from 'socket.io'
 import type { Shape } from '../types'
 import OpenAI from 'openai'
-console.log('here')
 
-const openai = new OpenAI({ apiKey: "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"})
+const openai = new OpenAI({ apiKey: "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"})
 
 const assistant = await openai.beta.assistants.create({
   instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a whiteboard.",
@@ -26,6 +25,9 @@ const assistant = await openai.beta.assistants.create({
     }
   }]
 });
+
+// update shape function
+// find shape function
 
 const thread = await openai.beta.threads.create();
 
@@ -69,6 +71,7 @@ async function pollRun() {
         }
         console.log("generatedShape", generatedShape)
         shapes.push(generatedShape)
+
         console.log("shapes", shapes)
       } else {
         console.log(runResult); // Log the result if not in progress
@@ -124,8 +127,8 @@ io.on('connection', async (socket: Socket) => {
 
   socket.on('create-shape', async (shape) => {
     shapes.push(shape)
-    socket.broadcast.emit('snapshot', shapes)
     pollRun();
+    socket.broadcast.emit('snapshot', shapes)
   })
 
   socket.on('update-shape', (updatedShape) => {
