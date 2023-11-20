@@ -27,6 +27,11 @@ const assistant = await openai.beta.assistants.create({
   }]
 });
 
+// i guess you can give it updates in the message as the prompt - and you can ask it to return an array
+// message: ie move squares to left
+// give it knowledge of the canvas - canvas size, shapes etc
+// output: array of shapes
+
 // update shape function
 // find shape function
 
