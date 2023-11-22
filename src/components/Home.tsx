@@ -36,6 +36,7 @@ function Home() {
   })
 
   useEventListener<Shape[]>('snapshot', (shapes) => {
+    console.log("snapshot", shapes)
     setShapes(shapes)
   })
 

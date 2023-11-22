@@ -37,61 +37,82 @@ const assistant = await openai.beta.assistants.create({
 
 const thread = await openai.beta.threads.create();
 
-const run = await openai.beta.threads.runs.create(
-thread.id,
-{
-  assistant_id: assistant.id,
-}
-)
 
-async function pollRun() {
-  console.log('in poll run')
-  let runResult: OpenAI.Beta.Threads.Runs.Run | undefined;
+// const messageAttempt = await openai.beta.threads.messages.create(
+//   thread.id,
+//   {
+//     role: "user",
+//     content: "draw a black rectangle at [0, 0]"
+//   }
+// )
 
-  async function getRun() {
-    console.log('in get run')
-    try {
-      runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-      console.log("STATUS", runResult.status)
-      if(runResult?.status === 'in_progress') {
-        console.log('in progress')
-        setTimeout(getRun, 3000); // Poll again if in progress
-      } else if (runResult?.status === 'requires_action') {
-        console.log("in required action")
-        const toolOutput = JSON.parse(runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '')
-        const id = Math.floor(Math.random() * 100000)
-        const HUE_OFFSET = Math.random() * 360 | 0
-        function randomColor() {
-          const h = (Math.random() * 60 + HUE_OFFSET) % 360 | 0
-          const s = (Math.random() * 10 + 30) | 0
-          const l = (Math.random() * 20 + 30) | 0
-          return `hsl(${0}, ${0}%, ${0}%)`
+async function pollRun(runid: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('in poll run')
+    let runResult: OpenAI.Beta.Threads.Runs.Run | undefined;
+
+    async function getRun() {
+      console.log('in get run')
+      try {
+        runResult = await openai.beta.threads.runs.retrieve(thread.id, runid);
+        console.log("STATUS", runResult.status)
+        if(runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+          console.log('in progress')
+          setTimeout(getRun, 3000); // Poll again if in progress
+        } else if (runResult?.status === 'requires_action') {
+          console.log("in required action")
+          const toolOutput = JSON.parse(runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '')
+          console.log("output", runResult?.required_action?.submit_tool_outputs)
+          const id = Math.floor(Math.random() * 100000)
+          const HUE_OFFSET = Math.random() * 360 | 0
+          function randomColor() {
+            const h = (Math.random() * 60 + HUE_OFFSET) % 360 | 0
+            const s = (Math.random() * 10 + 30) | 0
+            const l = (Math.random() * 20 + 30) | 0
+            return `hsl(${0}, ${0}%, ${0}%)`
+          }
+          const generatedShape: Shape = {
+            x: toolOutput?.x,
+            y: toolOutput?.y,
+            w: toolOutput?.w,
+            h: toolOutput?.h,
+            color: randomColor(),
+            id: id
+          }
+          console.log("generatedShape", generatedShape)
+          shapes.push(generatedShape)
+
+          console.log("shapes", shapes)
+
+          await openai.beta.threads.runs.submitToolOutputs(
+            thread.id,
+            runid,
+            {
+              tool_outputs: [
+                {
+                  tool_call_id: "call_abc123",
+                  output: "28C",
+                },
+              ],
+            }
+          );
+
+          resolve()
+        } else {
+          console.log(runResult); // Log the result if not in progress
+          const getAllMessages = await openai.beta.threads.messages.list(
+            thread.id
+          );
+          console.log("get all messages", getAllMessages)
         }
-        const generatedShape: Shape = {
-          x: toolOutput?.x,
-          y: toolOutput?.y,
-          w: toolOutput?.w,
-          h: toolOutput?.h,
-          color: randomColor(),
-          id: id
-        }
-        console.log("generatedShape", generatedShape)
-        shapes.push(generatedShape)
-
-        console.log("shapes", shapes)
-      } else {
-        console.log(runResult); // Log the result if not in progress
-        const getAllMessages = await openai.beta.threads.messages.list(
-          thread.id
-        );
-        console.log("get all messages", getAllMessages)
+      } catch (error) {
+        console.error('Error retrieving the run:', error);
+        reject()
       }
-    } catch (error) {
-      console.error('Error retrieving the run:', error);
     }
-  }
 
-  await getRun(); // Initial call to start the polling process
+    getRun(); // Initial call to start the polling process
+  })
 }
 
 
@@ -120,15 +141,31 @@ io.on('connection', async (socket: Socket) => {
   })
 
   socket.on('create-message', async (message) => {
-    console.log(message)
-    await openai.beta.threads.messages.create(
+    let messageWithContext = ''
+    messageWithContext += 'This is the user request:'
+    messageWithContext += message
+    messageWithContext += 'here are the existing shapes in the whiteboard:'
+    for(let i = 0; i < shapes.length; i++) {
+      messageWithContext += shapes[i]
+    }
+    console.log('messageWithContext', messageWithContext)
+    const messageAttempt = await openai.beta.threads.messages.create(
       thread.id,
       {
         role: "user",
         content: message
       }
     )
-    pollRun();
+    console.log(messageAttempt)
+    const run = await openai.beta.threads.runs.create(
+      thread.id,
+      {
+        assistant_id: assistant.id,
+      }
+      )
+
+    await pollRun(run.id);
+    console.log('after poll run', shapes)
     socket.broadcast.emit('snapshot', shapes)
   })
 
