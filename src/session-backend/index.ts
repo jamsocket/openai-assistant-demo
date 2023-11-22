@@ -4,6 +4,9 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: "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"})
 
+console.log('here')
+
+
 const assistant = await openai.beta.assistants.create({
   instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.",
   model: "gpt-4-1106-preview",
@@ -84,18 +87,24 @@ async function pollRun(runid: string): Promise<void> {
 
           console.log("shapes", shapes)
 
-          await openai.beta.threads.runs.submitToolOutputs(
+          try {
+          const submit = await openai.beta.threads.runs.submitToolOutputs(
             thread.id,
             runid,
             {
               tool_outputs: [
                 {
-                  tool_call_id: "call_abc123",
-                  output: "28C",
+                  tool_call_id: runResult?.required_action?.submit_tool_outputs.tool_calls[0].id ?? '',
                 },
               ],
             }
+
           );
+          console.log(submit)
+          } catch(error) {
+            console.error('Error submitting the run:', error)
+          }
+
 
           resolve()
         } else {
