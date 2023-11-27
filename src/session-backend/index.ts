@@ -2,7 +2,7 @@ import { Server, type Socket } from 'socket.io'
 import type { Shape } from '../types'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: "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"})
+const openai = new OpenAI({ apiKey: "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"})
 
 console.log('here')
 
@@ -27,6 +27,33 @@ const assistant = await openai.beta.assistants.create({
         "required": ["x", "y", "w", "h"]
       }
     }
+  }, {
+    "type": "function",
+    "function": {
+      "name": "editExistingShapes",
+      "description": "Alter existing shapes in the whiteboard based on the user prompt",
+      "parameters": {
+          "type": 'object',
+          "properties": {
+              "shapes": {
+                  "type": 'array',
+                  "items": {
+                      "type": 'object',
+                      "properties": {
+                        "x": {"type": "number", "description": "x position"},
+                        "y": {"type": "number", "description": "y position"},
+                        "w": {"type": "number", "description": "width of rectangle"},
+                        "h": {"type": "number", "description": "height of rectangle"},
+                        "color": {"type": "string", "description": "hsl(_, _%, _%) if a color isn't specified, just use black."}
+                      },
+                      "required": ["x", "y", "w", "h"]
+                  },
+              }
+          },
+        "required": ["shapes"]
+      }
+    }
+
   }]
 });
 
@@ -79,7 +106,7 @@ async function pollRun(runid: string): Promise<void> {
             y: toolOutput?.y,
             w: toolOutput?.w,
             h: toolOutput?.h,
-            color: randomColor(),
+            color: toolOutput?.color,
             id: id
           }
           console.log("generatedShape", generatedShape)
@@ -95,6 +122,7 @@ async function pollRun(runid: string): Promise<void> {
               tool_outputs: [
                 {
                   tool_call_id: runResult?.required_action?.submit_tool_outputs.tool_calls[0].id ?? '',
+                  output: ''
                 },
               ],
             }
