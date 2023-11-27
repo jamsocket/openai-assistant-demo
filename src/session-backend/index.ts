@@ -74,13 +74,7 @@ async function pollRun(runid: string): Promise<void> {
           const toolOutput = JSON.parse(runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '')
           console.log("output", runResult?.required_action?.submit_tool_outputs)
           const id = Math.floor(Math.random() * 100000)
-          const HUE_OFFSET = Math.random() * 360 | 0
-          function randomColor() {
-            const h = (Math.random() * 60 + HUE_OFFSET) % 360 | 0
-            const s = (Math.random() * 10 + 30) | 0
-            const l = (Math.random() * 20 + 30) | 0
-            return `hsl(${0}, ${0}%, ${0}%)`
-          }
+
           const generatedShape: Shape = {
             x: toolOutput?.x,
             y: toolOutput?.y,
