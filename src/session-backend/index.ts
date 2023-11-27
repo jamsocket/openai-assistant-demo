@@ -1,12 +1,11 @@
 import { Server, type Socket } from 'socket.io'
 import type { Shape } from '../types'
 import OpenAI from 'openai'
-console.log('here')
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY})
+const openai = new OpenAI({ apiKey: ""})
 
 const assistant = await openai.beta.assistants.create({
-  instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a whiteboard.",
+  instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.",
   model: "gpt-4-1106-preview",
   tools: [{
     "type": "function",
@@ -20,78 +19,111 @@ const assistant = await openai.beta.assistants.create({
           "y": {"type": "number", "description": "y position"},
           "w": {"type": "number", "description": "width of rectangle"},
           "h": {"type": "number", "description": "height of rectangle"},
+          "color": {"type": "string", "description": "hsl(_, _%, _%) if a color isn't specified, just use black."}
         },
         "required": ["x", "y", "w", "h"]
       }
     }
+  }, {
+    "type": "function",
+    "function": {
+      "name": "editExistingShapes",
+      "description": "Alter existing shapes in the whiteboard based on the user prompt",
+      "parameters": {
+          "type": 'object',
+          "properties": {
+              "shapes": {
+                  "type": 'array',
+                  "items": {
+                      "type": 'object',
+                      "properties": {
+                        "x": {"type": "number", "description": "x position"},
+                        "y": {"type": "number", "description": "y position"},
+                        "w": {"type": "number", "description": "width of rectangle"},
+                        "h": {"type": "number", "description": "height of rectangle"},
+                        "color": {"type": "string", "description": "hsl(_, _%, _%) if a color isn't specified, just use black."}
+                      },
+                      "required": ["x", "y", "w", "h"]
+                  },
+              }
+          },
+        "required": ["shapes"]
+      }
+    }
+
   }]
 });
 
 const thread = await openai.beta.threads.create();
 
-const message = await openai.beta.threads.messages.create(
-thread.id,
-{
-  role: "user",
-  content: "Draw a rectangle 100 x 100 pixels large at position [-56, -125]."
-}
-)
-console.log("message", message)
 
-const run = await openai.beta.threads.runs.create(
-thread.id,
-{
-  assistant_id: assistant.id,
-}
-)
+async function pollRun(runid: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('in poll run')
+    let runResult: OpenAI.Beta.Threads.Runs.Run | undefined;
 
-async function pollRun() {
-  console.log('in poll run')
-  let runResult: OpenAI.Beta.Threads.Runs.Run | undefined;
+    async function getRun() {
+      try {
+        runResult = await openai.beta.threads.runs.retrieve(thread.id, runid);
+        console.log("STATUS", runResult.status)
+        if(runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+          console.log('in progress')
+          setTimeout(getRun, 3000); // Poll again if in progress
+        } else if (runResult?.status === 'requires_action') {
+          console.log("in required action")
+          const toolOutput = JSON.parse(runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '')
+          console.log("output", runResult?.required_action?.submit_tool_outputs)
+          const id = Math.floor(Math.random() * 100000)
 
-  async function getRun() {
-    console.log('in get run')
-    try {
-      runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-      console.log("STATUS", runResult.status)
-      if(runResult?.status === 'in_progress') {
-        console.log('in progress')
-        setTimeout(getRun, 3000); // Poll again if in progress
-      } else if (runResult?.status === 'requires_action') {
-        console.log("in required action")
-        const toolOutput = JSON.parse(runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '')
-        const id = Math.floor(Math.random() * 100000)
-        const HUE_OFFSET = Math.random() * 360 | 0
-        function randomColor() {
-          const h = (Math.random() * 60 + HUE_OFFSET) % 360 | 0
-          const s = (Math.random() * 10 + 30) | 0
-          const l = (Math.random() * 20 + 30) | 0
-          return `hsl(${0}, ${0}%, ${0}%)`
+          const generatedShape: Shape = {
+            x: toolOutput?.x,
+            y: toolOutput?.y,
+            w: toolOutput?.w,
+            h: toolOutput?.h,
+            color: toolOutput?.color,
+            id: id
+          }
+          console.log("generatedShape", generatedShape)
+          shapes.push(generatedShape)
+
+          console.log("shapes", shapes)
+
+          try {
+          const submit = await openai.beta.threads.runs.submitToolOutputs(
+            thread.id,
+            runid,
+            {
+              tool_outputs: [
+                {
+                  tool_call_id: runResult?.required_action?.submit_tool_outputs.tool_calls[0].id ?? '',
+                  output: ''
+                },
+              ],
+            }
+
+          );
+          console.log(submit)
+          } catch(error) {
+            console.error('Error submitting the run:', error)
+          }
+
+
+          resolve()
+        } else {
+          console.log(runResult); // Log the result if not in progress
+          const getAllMessages = await openai.beta.threads.messages.list(
+            thread.id
+          );
+          console.log("get all messages", getAllMessages)
         }
-        const generatedShape: Shape = {
-          x: toolOutput?.x,
-          y: toolOutput?.y,
-          w: toolOutput?.w,
-          h: toolOutput?.h,
-          color: randomColor(),
-          id: id
-        }
-        console.log("generatedShape", generatedShape)
-        shapes.push(generatedShape)
-        console.log("shapes", shapes)
-      } else {
-        console.log(runResult); // Log the result if not in progress
-        const getAllMessages = await openai.beta.threads.messages.list(
-          thread.id
-        );
-        console.log("get all messages", getAllMessages)
+      } catch (error) {
+        console.error('Error retrieving the run:', error);
+        reject()
       }
-    } catch (error) {
-      console.error('Error retrieving the run:', error);
     }
-  }
 
-  await getRun(); // Initial call to start the polling process
+    getRun(); // Initial call to start the polling process
+  })
 }
 
 
@@ -119,15 +151,38 @@ io.on('connection', async (socket: Socket) => {
     socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
   })
 
+  socket.on('create-message', async (message) => {
+    let messageWithContext = ''
+    messageWithContext += 'This is the user request:'
+    messageWithContext += message
+    messageWithContext += 'here are the existing shapes in the whiteboard:'
+    for(let i = 0; i < shapes.length; i++) {
+      messageWithContext += shapes[i]
+    }
+    console.log('messageWithContext', messageWithContext)
+    const messageAttempt = await openai.beta.threads.messages.create(
+      thread.id,
+      {
+        role: "user",
+        content: message
+      }
+    )
+    console.log(messageAttempt)
+    const run = await openai.beta.threads.runs.create(
+      thread.id,
+      {
+        assistant_id: assistant.id,
+      }
+      )
 
-
-
-
+    await pollRun(run.id);
+    console.log('after poll run', shapes)
+    socket.broadcast.emit('snapshot', shapes)
+  })
 
   socket.on('create-shape', async (shape) => {
     shapes.push(shape)
     socket.broadcast.emit('snapshot', shapes)
-    pollRun();
   })
 
   socket.on('update-shape', (updatedShape) => {
