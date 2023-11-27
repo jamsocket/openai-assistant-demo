@@ -2,10 +2,7 @@ import { Server, type Socket } from 'socket.io'
 import type { Shape } from '../types'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: "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"})
-
-console.log('here')
-
+const openai = new OpenAI({ apiKey: ""})
 
 const assistant = await openai.beta.assistants.create({
   instructions: "You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.",
@@ -57,24 +54,8 @@ const assistant = await openai.beta.assistants.create({
   }]
 });
 
-// i guess you can give it updates in the message as the prompt - and you can ask it to return an array
-// message: ie move squares to left
-// give it knowledge of the canvas - canvas size, shapes etc
-// output: array of shapes
-
-// update shape function
-// find shape function
-
 const thread = await openai.beta.threads.create();
 
-
-// const messageAttempt = await openai.beta.threads.messages.create(
-//   thread.id,
-//   {
-//     role: "user",
-//     content: "draw a black rectangle at [0, 0]"
-//   }
-// )
 
 async function pollRun(runid: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -82,7 +63,6 @@ async function pollRun(runid: string): Promise<void> {
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined;
 
     async function getRun() {
-      console.log('in get run')
       try {
         runResult = await openai.beta.threads.runs.retrieve(thread.id, runid);
         console.log("STATUS", runResult.status)
