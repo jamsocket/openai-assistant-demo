@@ -1,18 +1,25 @@
-"use client";
+'use client'
 
 import { useState } from 'react'
 import Header from './Header'
 import Content from './Content'
 import { AvatarList, Spinner, Whiteboard } from './Whiteboard'
 import type { Shape, User } from '../types'
-import { SessionBackendProvider, useEventListener, useReady, useSend } from '@jamsocket/javascript/react'
+import {
+  SessionBackendProvider,
+  useEventListener,
+  useReady,
+  useSend,
+} from '@jamsocket/javascript/react'
 import type { SpawnResult } from '@jamsocket/javascript/types'
-import Chat from './Chat';
+import Chat from './Chat'
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
-  return <SessionBackendProvider spawnResult={spawnResult}>
-    <Home />
-  </SessionBackendProvider>
+  return (
+    <SessionBackendProvider spawnResult={spawnResult}>
+      <Home />
+    </SessionBackendProvider>
+  )
 }
 
 function Home() {
@@ -32,11 +39,11 @@ function Home() {
   })
 
   useEventListener<User>('cursor-position', (user) => {
-    setUsers((users) => users.map((p) => p.id === user.id ? user : p))
+    setUsers((users) => users.map((p) => (p.id === user.id ? user : p)))
   })
 
   useEventListener<Shape[]>('snapshot', (shapes) => {
-    console.log("snapshot", shapes)
+    console.log('snapshot', shapes)
     setShapes(shapes)
   })
 
@@ -44,7 +51,7 @@ function Home() {
     setShapes((shapes) => {
       const shapeToUpdate = shapes.find((s) => s.id === shape.id)
       if (!shapeToUpdate) return [...shapes, shape]
-      return shapes.map((s) => s.id === shape.id ? { ...s, ...shape } : s)
+      return shapes.map((s) => (s.id === shape.id ? { ...s, ...shape } : s))
     })
   })
 
@@ -67,11 +74,13 @@ function Home() {
             }}
             onUpdateShape={(id, shape) => {
               sendEvent('update-shape', { id, ...shape })
-              setShapes((shapes) => shapes.map((s) => s.id === id ? { ...s, ...shape } : s))
+              setShapes((shapes) => shapes.map((s) => (s.id === id ? { ...s, ...shape } : s)))
             }}
           />
-        ) : <Spinner />}
-        <Chat/>
+        ) : (
+          <Spinner />
+        )}
+        <Chat />
       </Content>
     </main>
   )

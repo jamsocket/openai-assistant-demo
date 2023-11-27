@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,md}\""
   },
   "dependencies": {
     "@jamsocket/javascript": "^0.1.1",
@@ -19,6 +20,8 @@
     "next": "13.4.9",
     "openai": "^4.18.0",
     "postcss": "8.4.23",
+    "prettier": "^3.1.0",
+    "prettier-plugin-tailwindcss": "^0.5.7",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "server-only": "^0.0.1",
