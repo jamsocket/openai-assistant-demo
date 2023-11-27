@@ -2,7 +2,7 @@ import { Server, type Socket } from 'socket.io'
 import type { Shape } from '../types'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: '' })
+const openai = new OpenAI({ apiKey: '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' })
 
 const assistant = await openai.beta.assistants.create({
   instructions:
@@ -70,20 +70,8 @@ async function pollRun(runid: string): Promise<void> {
     console.log('in poll run')
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined
 
-    async function getRun() {
-      try {
-        runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
-        console.log('STATUS', runResult.status)
-        if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-          console.log('in progress')
-          setTimeout(getRun, 3000) // Poll again if in progress
-        } else if (runResult?.status === 'requires_action') {
-          console.log('in required action')
-          const toolOutput = JSON.parse(
-            runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '',
-          )
-          console.log('output', runResult?.required_action?.submit_tool_outputs.tool_calls[0])
-          const id = Math.floor(Math.random() * 100000)
+    function createShape(toolOutput: any) {
+      const id = Math.floor(Math.random() * 100000)
 
           const generatedShape: Shape = {
             x: toolOutput?.x,
@@ -97,16 +85,48 @@ async function pollRun(runid: string): Promise<void> {
           shapes.push(generatedShape)
 
           console.log('shapes', shapes)
+    }
+
+    function editExistingShapes(toolOutput: any) {
+      console.log('in existing shape')
+      console.log(toolOutput)
+    }
+
+    async function getRun() {
+      try {
+        runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
+        console.log('STATUS', runResult.status)
+        if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+          console.log('in progress')
+          setTimeout(getRun, 3000) // Poll again if in progress
+        } else if (runResult?.status === 'requires_action') {
+          console.log('in required action')
+          const toolOutput = JSON.parse(
+            runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '',
+          )
+          console.log('output', runResult?.required_action?.submit_tool_outputs.tool_calls.length)
+          console.log('first output', runResult?.required_action?.submit_tool_outputs.tool_calls[0])
+
+          let toolOutputs: OpenAI.Beta.Threads.Runs.RunSubmitToolOutputsParams.ToolOutput[] = []
+          runResult?.required_action?.submit_tool_outputs.tool_calls.forEach((call) => {
+            if(call.function.name === 'createShape') {
+              createShape(call.function.arguments)
+            } else {
+              editExistingShapes(call.function.arguments)
+            }
+            toolOutputs.push(
+              {
+                tool_call_id:
+                  call.id ?? '',
+                output: '',
+              }
+            )
+          })
+
 
           try {
             const submit = await openai.beta.threads.runs.submitToolOutputs(thread.id, runid, {
-              tool_outputs: [
-                {
-                  tool_call_id:
-                    runResult?.required_action?.submit_tool_outputs.tool_calls[0].id ?? '',
-                  output: '',
-                },
-              ],
+              tool_outputs: toolOutputs,
             })
             console.log(submit)
           } catch (error) {
