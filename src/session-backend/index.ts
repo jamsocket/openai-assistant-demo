@@ -51,8 +51,9 @@ const assistant = await openai.beta.assistants.create({
                     type: 'string',
                     description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
                   },
+                  id: { type: 'string', description: 'a unique string id for a shape. it should remain the same as the input shape whose parameters are being alterned'}
                 },
-                required: ['x', 'y', 'w', 'h'],
+                required: ['x', 'y', 'w', 'h', 'id'],
               },
             },
           },
@@ -73,12 +74,14 @@ async function pollRun(runid: string): Promise<void> {
     function createShape(toolOutput: any) {
       const id = Math.floor(Math.random() * 100000)
 
+      const jsonObject = JSON.parse(toolOutput);
+
           const generatedShape: Shape = {
-            x: toolOutput?.x,
-            y: toolOutput?.y,
-            w: toolOutput?.w,
-            h: toolOutput?.h,
-            color: toolOutput?.color,
+            x: jsonObject?.x,
+            y: jsonObject?.y,
+            w: jsonObject?.w,
+            h: jsonObject?.h,
+            color: jsonObject?.color ?? `hsl(0, 0%, 0%)`,
             id: id,
           }
           console.log('generatedShape', generatedShape)
@@ -90,6 +93,10 @@ async function pollRun(runid: string): Promise<void> {
     function editExistingShapes(toolOutput: any) {
       console.log('in existing shape')
       console.log(toolOutput)
+
+      const jsonObject = JSON.parse(toolOutput);
+
+      shapes = jsonObject?.shapes
     }
 
     async function getRun() {
@@ -132,7 +139,7 @@ async function pollRun(runid: string): Promise<void> {
           } catch (error) {
             console.error('Error submitting the run:', error)
           }
-
+          console.log('at resolve')
           resolve()
         } else {
           console.log(runResult) // Log the result if not in progress
@@ -151,7 +158,7 @@ async function pollRun(runid: string): Promise<void> {
 
 const io = new Server(8080, { cors: { origin: '*' } })
 
-const shapes: Shape[] = []
+let shapes: Shape[] = []
 console.log(shapes)
 const users: Set<{ id: string; socket: Socket }> = new Set()
 io.on('connection', async (socket: Socket) => {

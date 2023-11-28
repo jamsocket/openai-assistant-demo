@@ -1,15 +1,17 @@
 'use client'
+import Chat from "./Chat"
 
 export default function Header({ children }: { children?: React.ReactNode }) {
   return (
     <div className=" w-screen border-b border-slate-600 z-10 bg-slate-900/90 absolute backdrop-blur">
-      <div className="flex mx-auto max-w-7xl items-center px-6 py-4 justify-between">
+      <div className="flex mx-auto max-w-7xl items-center px-6 pt-4 justify-between">
         <h1 className="flex gap-4 font-light tracking-widest items-center text-md uppercase drop-shadow-lg text-slate-500">
           <JamsocketLogo />
           Whiteboard
         </h1>
         {children}
       </div>
+      <Chat />
     </div>
   )
 }

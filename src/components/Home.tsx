@@ -59,6 +59,7 @@ function Home() {
     <main>
       <Header>
         <AvatarList users={users} />
+
       </Header>
       <Content>
         {ready ? (
@@ -80,7 +81,6 @@ function Home() {
         ) : (
           <Spinner />
         )}
-        <Chat />
       </Content>
     </main>
   )
