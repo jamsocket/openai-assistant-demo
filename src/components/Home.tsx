@@ -59,7 +59,6 @@ function Home() {
     <main>
       <Header>
         <AvatarList users={users} />
-
       </Header>
       <Content>
         {ready ? (

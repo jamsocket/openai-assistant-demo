@@ -1,5 +1,5 @@
 'use client'
-import Chat from "./Chat"
+import Chat from './Chat'
 
 export default function Header({ children }: { children?: React.ReactNode }) {
   return (

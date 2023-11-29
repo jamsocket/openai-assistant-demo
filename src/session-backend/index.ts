@@ -33,36 +33,32 @@ const assistant = await openai.beta.assistants.create({
     {
       type: 'function',
       function: {
-        name: 'editExistingShapes',
-        description: 'Alter existing shapes in the whiteboard based on the user prompt',
+        name: 'editExistingShape',
+        description:
+          'Updates the properties for a shape given its id. For example, if the shape array looks like this [{id: 1234, x: 0, y: 0, color: `hsl(0, 0%, 0%)`}] and my user request is to move this shape to the left, I should return {id: 1234, x: -10}',
         parameters: {
           type: 'object',
           properties: {
-            shapes: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number', description: 'x position' },
-                  y: { type: 'number', description: 'y position' },
-                  w: { type: 'number', description: 'width of rectangle' },
-                  h: { type: 'number', description: 'height of rectangle' },
-                  color: {
-                    type: 'string',
-                    description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
-                  },
-                  id: { type: 'string', description: 'a unique string id for a shape. it should remain the same as the input shape whose parameters are being alterned'}
-                },
-                required: ['x', 'y', 'w', 'h', 'id'],
-              },
+            id: { type: 'number', description: 'the id of the existing shape to edit' },
+            x: { type: 'number', description: 'x position' },
+            y: { type: 'number', description: 'y position' },
+            w: { type: 'number', description: 'width of rectangle' },
+            h: { type: 'number', description: 'height of rectangle' },
+            color: {
+              type: 'string',
+              description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
             },
           },
-          required: ['shapes'],
+          required: ['id'],
         },
       },
     },
   ],
 })
+
+// Return the id for a shape whose parameters need to edited
+
+// updates the properties for a shape given its id
 
 const thread = await openai.beta.threads.create()
 
@@ -71,81 +67,102 @@ async function pollRun(runid: string): Promise<void> {
     console.log('in poll run')
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined
 
-    function createShape(toolOutput: any) {
-      const id = Math.floor(Math.random() * 100000)
+    const functions: Record<string, (toolOutput: any) => void> = {
+      createShape(toolOutput: any) {
+        const id = Math.floor(Math.random() * 100000)
+        if (!Number.isFinite(toolOutput?.x) || !Number.isFinite(toolOutput?.y) || !Number.isFinite(toolOutput?.w) || !Number.isFinite(toolOutput?.h)) {
+          throw new Error('required params were not given')
+        }
+        const generatedShape: Shape = {
+          x: toolOutput.x,
+          y: toolOutput.y,
+          w: toolOutput.w,
+          h: toolOutput.h,
+          color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
+          id: id,
+        }
+        console.log('generatedShape', generatedShape)
+        shapes.push(generatedShape)
 
-      const jsonObject = JSON.parse(toolOutput);
+        console.log('shapes', shapes)
+      },
+      editExistingShape(toolOutput: any) {
+        console.log('in existing shape')
+        console.log(toolOutput)
 
-          const generatedShape: Shape = {
-            x: jsonObject?.x,
-            y: jsonObject?.y,
-            w: jsonObject?.w,
-            h: jsonObject?.h,
-            color: jsonObject?.color ?? `hsl(0, 0%, 0%)`,
-            id: id,
-          }
-          console.log('generatedShape', generatedShape)
-          shapes.push(generatedShape)
-
-          console.log('shapes', shapes)
-    }
-
-    function editExistingShapes(toolOutput: any) {
-      console.log('in existing shape')
-      console.log(toolOutput)
-
-      const jsonObject = JSON.parse(toolOutput);
-
-      shapes = jsonObject?.shapes
+        let editShape = shapes.find((shape) => shape.id === toolOutput.id)
+        if (!editShape) {
+          throw new Error('could not find shape')
+        }
+        editShape.x = toolOutput?.x ?? editShape.x
+        editShape.y = toolOutput?.y ?? editShape.y
+        editShape.w = toolOutput?.w ?? editShape.w
+        editShape.h = toolOutput?.h ?? editShape.h
+        editShape.color = toolOutput?.color ?? editShape.color
+      },
     }
 
     async function getRun() {
       try {
         runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
-        console.log('STATUS', runResult.status)
-        if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-          console.log('in progress')
-          setTimeout(getRun, 3000) // Poll again if in progress
-        } else if (runResult?.status === 'requires_action') {
+        // console.log('STATUS', runResult.status)
+        const acceptedStatus = ['in_progress', 'queued', 'requires_action']
+        while (acceptedStatus.includes(runResult?.status)) {
+          if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+            console.log('in progress')
+            await sleep(1000)
+            runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
+            continue
+          }
+
           console.log('in required action')
-          const toolOutput = JSON.parse(
-            runResult?.required_action?.submit_tool_outputs.tool_calls[0].function.arguments ?? '',
-          )
-          console.log('output', runResult?.required_action?.submit_tool_outputs.tool_calls.length)
-          console.log('first output', runResult?.required_action?.submit_tool_outputs.tool_calls[0])
+          // console.log('output', runResult?.required_action?.submit_tool_outputs.tool_calls.length)
+          // console.log('first output', runResult?.required_action?.submit_tool_outputs.tool_calls[0])
 
           let toolOutputs: OpenAI.Beta.Threads.Runs.RunSubmitToolOutputsParams.ToolOutput[] = []
           runResult?.required_action?.submit_tool_outputs.tool_calls.forEach((call) => {
-            if(call.function.name === 'createShape') {
-              createShape(call.function.arguments)
-            } else {
-              editExistingShapes(call.function.arguments)
+            const jsonObject = JSON.parse(call.function.arguments)
+            const fn = functions[call.function.name]
+            if (!fn) {
+              console.error('couldnt find function')
+              console.log("output that was sent to openai: error: couldnt find function")
+              console.log("function that open ai told us to call:", call.function.name)
+              console.log("arguments", jsonObject)
+              toolOutputs.push({
+                tool_call_id: call.id ?? '',
+                output: 'error: couldnt find function',
+              })
+              return
             }
-            toolOutputs.push(
-              {
-                tool_call_id:
-                  call.id ?? '',
-                output: '',
+
+            let output = 'success'
+            try {
+              fn(jsonObject)
+            } catch (err) {
+              if (err instanceof Error) {
+                output = err.toString()
+              } else {
+                output = 'unknown error occured'
               }
-            )
+            }
+            console.log("output that was sent to openai", output)
+            console.log("function that open ai told us to call:", call.function.name)
+            console.log("arguments", jsonObject)
+            toolOutputs.push({
+              tool_call_id: call.id ?? '',
+              output: `${output}`,
+            })
           })
 
-
-          try {
-            const submit = await openai.beta.threads.runs.submitToolOutputs(thread.id, runid, {
-              tool_outputs: toolOutputs,
-            })
-            console.log(submit)
-          } catch (error) {
-            console.error('Error submitting the run:', error)
-          }
-          console.log('at resolve')
-          resolve()
-        } else {
-          console.log(runResult) // Log the result if not in progress
-          const getAllMessages = await openai.beta.threads.messages.list(thread.id)
-          console.log('get all messages', getAllMessages)
+          runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, runid, {
+            tool_outputs: toolOutputs,
+          })
+          // console.log('changed run result after submitting tool function')
+          // console.log(runResult)
         }
+        console.log('run completed')
+        // console.log(runResult) // Log the result if not in progress
+        resolve()
       } catch (error) {
         console.error('Error retrieving the run:', error)
         reject()
@@ -181,12 +198,12 @@ io.on('connection', async (socket: Socket) => {
 
   socket.on('create-message', async (message) => {
     let messageWithContext = ''
-    messageWithContext += 'This is the user request:'
+    messageWithContext += 'This is the user request: '
     messageWithContext += message
-    messageWithContext += 'here are the existing shapes in the whiteboard:'
-    for (let i = 0; i < shapes.length; i++) {
-      messageWithContext += shapes[i]
-    }
+    messageWithContext += ' '
+    messageWithContext += 'Here are the existing shapes in the whiteboard: '
+    messageWithContext += JSON.stringify(shapes)
+    messageWithContext += ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
     console.log('messageWithContext', messageWithContext)
     const messageAttempt = await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
@@ -199,7 +216,7 @@ io.on('connection', async (socket: Socket) => {
 
     await pollRun(run.id)
     console.log('after poll run', shapes)
-    socket.broadcast.emit('snapshot', shapes)
+    socket.emit('snapshot', shapes)
   })
 
   socket.on('create-shape', async (shape) => {
@@ -222,3 +239,9 @@ io.on('connection', async (socket: Socket) => {
     socket.broadcast.emit('user-exited', newUser.id)
   })
 })
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    setTimeout(resolve, ms)
+  })
+}
