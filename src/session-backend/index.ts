@@ -64,13 +64,17 @@ const thread = await openai.beta.threads.create()
 // a function that polls the run status and executes relevant tasks
 async function pollRun(runid: string): Promise<void> {
   return new Promise((resolve, reject) => {
-
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined
 
     // functions that actually create new shapes or edit existing shapes based on the tool ouptut from openai
     const functions: Record<string, (toolOutput: any) => void> = {
       createShape(toolOutput: any) {
-        if (!Number.isFinite(toolOutput?.x) || !Number.isFinite(toolOutput?.y) || !Number.isFinite(toolOutput?.w) || !Number.isFinite(toolOutput?.h)) {
+        if (
+          !Number.isFinite(toolOutput?.x) ||
+          !Number.isFinite(toolOutput?.y) ||
+          !Number.isFinite(toolOutput?.w) ||
+          !Number.isFinite(toolOutput?.h)
+        ) {
           throw new Error('required params were not given')
         }
         // create a new shape and add it to the shapes array
@@ -193,7 +197,6 @@ io.on('connection', async (socket: Socket) => {
 
   // receive a user message. this is the prompt that we'll send to the openai assistant along with some context.
   socket.on('create-message', async (message) => {
-
     // structure the message with context on the existing whiteboard.
     let messageWithContext = ''
     messageWithContext += 'This is the user request: '
@@ -201,7 +204,8 @@ io.on('connection', async (socket: Socket) => {
     messageWithContext += ' '
     messageWithContext += 'Here are the existing shapes in the whiteboard: '
     messageWithContext += JSON.stringify(shapes)
-    messageWithContext += ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
+    messageWithContext +=
+      ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
     console.log('messageWithContext', messageWithContext)
 
     // add a message to the thread
