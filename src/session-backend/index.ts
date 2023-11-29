@@ -4,6 +4,8 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: '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' })
 
+// Create an assistant
+// In the tools parameter, I am supplying an array of tools with a specific JSON structure
 const assistant = await openai.beta.assistants.create({
   instructions:
     'You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.',
@@ -56,44 +58,39 @@ const assistant = await openai.beta.assistants.create({
   ],
 })
 
-// Return the id for a shape whose parameters need to edited
-
-// updates the properties for a shape given its id
-
+// Create a thread for this user session
 const thread = await openai.beta.threads.create()
 
+// a function that polls the run status and executes relevant tasks
 async function pollRun(runid: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log('in poll run')
+
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined
 
+    // functions that actually create new shapes or edit existing shapes based on the tool ouptut from openai
     const functions: Record<string, (toolOutput: any) => void> = {
       createShape(toolOutput: any) {
-        const id = Math.floor(Math.random() * 100000)
         if (!Number.isFinite(toolOutput?.x) || !Number.isFinite(toolOutput?.y) || !Number.isFinite(toolOutput?.w) || !Number.isFinite(toolOutput?.h)) {
           throw new Error('required params were not given')
         }
+        // create a new shape and add it to the shapes array
         const generatedShape: Shape = {
           x: toolOutput.x,
           y: toolOutput.y,
           w: toolOutput.w,
           h: toolOutput.h,
           color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
-          id: id,
+          id: Math.floor(Math.random() * 100000),
         }
-        console.log('generatedShape', generatedShape)
         shapes.push(generatedShape)
-
-        console.log('shapes', shapes)
       },
       editExistingShape(toolOutput: any) {
-        console.log('in existing shape')
-        console.log(toolOutput)
-
+        // find the shape to update based on id
         let editShape = shapes.find((shape) => shape.id === toolOutput.id)
         if (!editShape) {
           throw new Error('could not find shape')
         }
+        // update the relevant parameters
         editShape.x = toolOutput?.x ?? editShape.x
         editShape.y = toolOutput?.y ?? editShape.y
         editShape.w = toolOutput?.w ?? editShape.w
@@ -104,30 +101,26 @@ async function pollRun(runid: string): Promise<void> {
 
     async function getRun() {
       try {
+        // get the run result
         runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
-        // console.log('STATUS', runResult.status)
+        // while the run status is still in an accepted status, keep waiting for new status updates
         const acceptedStatus = ['in_progress', 'queued', 'requires_action']
         while (acceptedStatus.includes(runResult?.status)) {
+          // poll the run every second if the run is still in progress
           if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-            console.log('in progress')
             await sleep(1000)
             runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
             continue
           }
 
-          console.log('in required action')
-          // console.log('output', runResult?.required_action?.submit_tool_outputs.tool_calls.length)
-          // console.log('first output', runResult?.required_action?.submit_tool_outputs.tool_calls[0])
-
+          // create an array of tool outputs with a call id and output value.
           let toolOutputs: OpenAI.Beta.Threads.Runs.RunSubmitToolOutputsParams.ToolOutput[] = []
+          // if the run status = requires_action, call the relevant functions with the given tool call arguments and send the results back to openai
           runResult?.required_action?.submit_tool_outputs.tool_calls.forEach((call) => {
-            const jsonObject = JSON.parse(call.function.arguments)
+            const functionArgs = JSON.parse(call.function.arguments)
             const fn = functions[call.function.name]
             if (!fn) {
-              console.error('couldnt find function')
-              console.log("output that was sent to openai: error: couldnt find function")
-              console.log("function that open ai told us to call:", call.function.name)
-              console.log("arguments", jsonObject)
+              console.error('function name did not match accepted function arguments')
               toolOutputs.push({
                 tool_call_id: call.id ?? '',
                 output: 'error: couldnt find function',
@@ -135,33 +128,31 @@ async function pollRun(runid: string): Promise<void> {
               return
             }
 
-            let output = 'success'
+            let fnStatus = 'success'
+            // try calling the relevant function with arguments supplied by openai
+            // if there is an error, update the output
             try {
-              fn(jsonObject)
+              fn(functionArgs)
             } catch (err) {
               if (err instanceof Error) {
-                output = err.toString()
+                fnStatus = err.toString()
               } else {
-                output = 'unknown error occured'
+                fnStatus = 'unknown error occured'
               }
             }
-            console.log("output that was sent to openai", output)
-            console.log("function that open ai told us to call:", call.function.name)
-            console.log("arguments", jsonObject)
+
             toolOutputs.push({
               tool_call_id: call.id ?? '',
-              output: `${output}`,
+              output: `${fnStatus}`,
             })
           })
 
+          // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
           runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, runid, {
             tool_outputs: toolOutputs,
           })
-          // console.log('changed run result after submitting tool function')
-          // console.log(runResult)
         }
-        console.log('run completed')
-        // console.log(runResult) // Log the result if not in progress
+        // resolve get run
         resolve()
       } catch (error) {
         console.error('Error retrieving the run:', error)
@@ -169,15 +160,19 @@ async function pollRun(runid: string): Promise<void> {
       }
     }
 
-    getRun() // Initial call to start the polling process
+    // Initial call to start the polling process
+    getRun()
   })
 }
 
+// Start a socket IO server that can be used to communicate between the client and servier
 const io = new Server(8080, { cors: { origin: '*' } })
 
+// This shapes array will save the state of the whiteboard for a user session
 let shapes: Shape[] = []
-console.log(shapes)
+
 const users: Set<{ id: string; socket: Socket }> = new Set()
+
 io.on('connection', async (socket: Socket) => {
   console.log('New user connected:', socket.id)
   socket.emit('snapshot', shapes)
@@ -196,7 +191,10 @@ io.on('connection', async (socket: Socket) => {
     socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
   })
 
+  // receive a user message. this is the prompt that we'll send to the openai assistant along with some context.
   socket.on('create-message', async (message) => {
+
+    // structure the message with context on the existing whiteboard.
     let messageWithContext = ''
     messageWithContext += 'This is the user request: '
     messageWithContext += message
@@ -205,17 +203,22 @@ io.on('connection', async (socket: Socket) => {
     messageWithContext += JSON.stringify(shapes)
     messageWithContext += ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
     console.log('messageWithContext', messageWithContext)
-    const messageAttempt = await openai.beta.threads.messages.create(thread.id, {
+
+    // add a message to the thread
+    await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
       content: message,
     })
-    console.log(messageAttempt)
+
+    // create a run to process the message
     const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id,
     })
 
+    // a function that polls the run status and executes relevant tasks
     await pollRun(run.id)
-    console.log('after poll run', shapes)
+
+    // send updated shapes array to the client
     socket.emit('snapshot', shapes)
   })
 
