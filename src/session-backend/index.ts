@@ -61,115 +61,117 @@ const assistant = await openai.beta.assistants.create({
 // Create a thread for this user session
 const thread = await openai.beta.threads.create()
 
-// a function that polls the run status and executes relevant tasks
-async function pollRun(runid: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+// functions we call in pollRun depending on the required action by openai
+const functions: Record<string, (toolOutput: any) => void> = {
+  createShape(toolOutput: any) {
+    if (
+      !Number.isFinite(toolOutput?.x) ||
+      !Number.isFinite(toolOutput?.y) ||
+      !Number.isFinite(toolOutput?.w) ||
+      !Number.isFinite(toolOutput?.h)
+    ) {
+      throw new Error('required params were not given')
+    }
+    // create a new shape and add it to the shapes array
+    const generatedShape: Shape = {
+      x: toolOutput.x,
+      y: toolOutput.y,
+      w: toolOutput.w,
+      h: toolOutput.h,
+      color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
+      id: Math.floor(Math.random() * 100000),
+    }
+    shapes.push(generatedShape)
+  },
+  editExistingShape(toolOutput: any) {
+    // find the shape to update based on id
+    let editShape = shapes.find((shape) => shape.id === toolOutput.id)
+    if (!editShape) {
+      throw new Error('could not find shape')
+    }
+    // update the relevant parameters
+    editShape.x = toolOutput?.x ?? editShape.x
+    editShape.y = toolOutput?.y ?? editShape.y
+    editShape.w = toolOutput?.w ?? editShape.w
+    editShape.h = toolOutput?.h ?? editShape.h
+    editShape.color = toolOutput?.color ?? editShape.color
+  },
+}
+
+// a function that starts a run and continues to poll until relevant tasks are executed or fail
+async function startRun(): Promise<void> {
+  return new Promise(async (resolve, reject) => {
+    // create a run to process the message
+    const run = await openai.beta.threads.runs.create(thread.id, {
+      assistant_id: assistant.id,
+    })
+
     let runResult: OpenAI.Beta.Threads.Runs.Run | undefined
 
-    // functions that actually create new shapes or edit existing shapes based on the tool ouptut from openai
-    const functions: Record<string, (toolOutput: any) => void> = {
-      createShape(toolOutput: any) {
-        if (
-          !Number.isFinite(toolOutput?.x) ||
-          !Number.isFinite(toolOutput?.y) ||
-          !Number.isFinite(toolOutput?.w) ||
-          !Number.isFinite(toolOutput?.h)
-        ) {
-          throw new Error('required params were not given')
-        }
-        // create a new shape and add it to the shapes array
-        const generatedShape: Shape = {
-          x: toolOutput.x,
-          y: toolOutput.y,
-          w: toolOutput.w,
-          h: toolOutput.h,
-          color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
-          id: Math.floor(Math.random() * 100000),
-        }
-        shapes.push(generatedShape)
-      },
-      editExistingShape(toolOutput: any) {
-        // find the shape to update based on id
-        let editShape = shapes.find((shape) => shape.id === toolOutput.id)
-        if (!editShape) {
-          throw new Error('could not find shape')
-        }
-        // update the relevant parameters
-        editShape.x = toolOutput?.x ?? editShape.x
-        editShape.y = toolOutput?.y ?? editShape.y
-        editShape.w = toolOutput?.w ?? editShape.w
-        editShape.h = toolOutput?.h ?? editShape.h
-        editShape.color = toolOutput?.color ?? editShape.color
-      },
-    }
+    try {
+      // get the run result
+      runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id)
 
-    async function getRun() {
-      try {
-        // get the run result
-        runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
-        // while the run status is still in an accepted status, keep waiting for new status updates
-        const acceptedStatus = ['in_progress', 'queued', 'requires_action']
-        while (acceptedStatus.includes(runResult?.status)) {
-          // poll the run every second if the run is still in progress
-          if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-            await sleep(1000)
-            runResult = await openai.beta.threads.runs.retrieve(thread.id, runid)
-            continue
+      const failedStatus = ['cancelled', 'failed', 'expired']
+      if (failedStatus.includes(runResult?.status)) {
+        reject(new Error(`run result failed with status: ${runResult.status}`))
+      }
+
+      // while the run status is still in an accepted status, keep waiting for new status updates
+      const pendingStatus = ['in_progress', 'queued', 'requires_action']
+      while (pendingStatus.includes(runResult?.status)) {
+        // poll the run every second if the run is still in progress
+        if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+          await sleep(1000)
+          runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id)
+          continue
+        }
+
+        const toolCalls = runResult?.required_action?.submit_tool_outputs.tool_calls ?? []
+        const toolOutputs = toolCalls.map((call) => {
+          const functionArgs = JSON.parse(call.function.arguments)
+          const fn = functions[call.function.name]
+          if (!fn) {
+            console.error('function name did not match accepted function arguments')
+            return {
+              tool_call_id: call.id ?? '',
+              output: 'error: couldnt find function',
+            }
           }
 
-          // create an array of tool outputs with a call id and output value.
-          let toolOutputs: OpenAI.Beta.Threads.Runs.RunSubmitToolOutputsParams.ToolOutput[] = []
-          // if the run status = requires_action, call the relevant functions with the given tool call arguments and send the results back to openai
-          runResult?.required_action?.submit_tool_outputs.tool_calls.forEach((call) => {
-            const functionArgs = JSON.parse(call.function.arguments)
-            const fn = functions[call.function.name]
-            if (!fn) {
-              console.error('function name did not match accepted function arguments')
-              toolOutputs.push({
-                tool_call_id: call.id ?? '',
-                output: 'error: couldnt find function',
-              })
-              return
+          let fnStatus = 'success'
+          // try calling the relevant function with arguments supplied by openai
+          // if there is an error, update the output
+          try {
+            fn(functionArgs)
+          } catch (err) {
+            if (err instanceof Error) {
+              fnStatus = err.toString()
+            } else {
+              fnStatus = 'unknown error occured'
             }
+          }
+          return {
+            tool_call_id: call.id ?? '',
+            output: `${fnStatus}`,
+          }
+        })
 
-            let fnStatus = 'success'
-            // try calling the relevant function with arguments supplied by openai
-            // if there is an error, update the output
-            try {
-              fn(functionArgs)
-            } catch (err) {
-              if (err instanceof Error) {
-                fnStatus = err.toString()
-              } else {
-                fnStatus = 'unknown error occured'
-              }
-            }
-
-            toolOutputs.push({
-              tool_call_id: call.id ?? '',
-              output: `${fnStatus}`,
-            })
-          })
-
-          // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
-          runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, runid, {
-            tool_outputs: toolOutputs,
-          })
-        }
-        // resolve get run
-        resolve()
-      } catch (error) {
-        console.error('Error retrieving the run:', error)
-        reject()
+        // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
+        runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, run.id, {
+          tool_outputs: toolOutputs,
+        })
       }
-    }
 
-    // Initial call to start the polling process
-    getRun()
+      resolve()
+    } catch (error) {
+      console.error('Error retrieving the run:', error)
+      reject()
+    }
   })
 }
 
-// Start a socket IO server that can be used to communicate between the client and servier
+// Start a socket IO server that can be used to communicate between the client and server
 const io = new Server(8080, { cors: { origin: '*' } })
 
 // This shapes array will save the state of the whiteboard for a user session
@@ -214,13 +216,8 @@ io.on('connection', async (socket: Socket) => {
       content: message,
     })
 
-    // create a run to process the message
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistant.id,
-    })
-
     // a function that polls the run status and executes relevant tasks
-    await pollRun(run.id)
+    await startRun()
 
     // send updated shapes array to the client
     socket.emit('snapshot', shapes)
