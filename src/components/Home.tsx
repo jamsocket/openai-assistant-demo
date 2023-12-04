@@ -80,7 +80,6 @@ function Home() {
         ) : (
           <Spinner />
         )}
-        <Chat />
       </Content>
     </main>
   )

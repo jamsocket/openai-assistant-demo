@@ -5,7 +5,7 @@ export default function Chat() {
   const [message, setMessage] = useState('')
   const sendEvent = useSend()
   return (
-    <div className="p-6 bg-white">
+    <div className="m-4">
       <form
         onSubmit={async (e) => {
           e.preventDefault()
@@ -15,8 +15,8 @@ export default function Chat() {
       >
         <input
           type="text"
-          placeholder="Type your message..."
-          className="w-full p-4 bg-neutral-700 caret-neutral-200 text-white"
+          placeholder="Write a message..."
+          className="w-full px-4 py-2 bg-gray-600 caret-neutral-200 text-white rounded-lg"
           value={message}
           onChange={(e) => {
             setMessage(e.target.value)

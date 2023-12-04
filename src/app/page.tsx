@@ -6,7 +6,7 @@ const WHITEBOARD_NAME = 'openai-assistant-demo/default'
 const OPENAI_API_KEY = '[YOUR OPENAI_API_KEY HERE]'
 
 const spawnBackend = init({
-  account: '[YOUR JAMSOCKET ACCOUNT NAME HERE]',
+  account: '[YOUR JAMSOCKET ACCOUNT NAME]',
   service: 'openai-assistant-demo',
   // NOTE: we want to keep the Jamsocket token secret, so we can only do this in a server component
   // We'll leave this blank for now, since we don't need it when developing with the dev CLI
