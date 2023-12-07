@@ -118,6 +118,7 @@ async function startRun(): Promise<void> {
 
       const failedStatus = ['cancelled', 'failed', 'expired']
       if (failedStatus.includes(runResult?.status)) {
+        runUpdate = 'Run failed, please try again.'
         reject(new Error(`run result failed with status: ${runResult.status}`))
       }
 
@@ -126,6 +127,7 @@ async function startRun(): Promise<void> {
       while (pendingStatus.includes(runResult?.status)) {
         // poll the run every second if the run is still in progress
         if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
+          runUpdate = 'Run is in progress.'
           await sleep(1000)
           runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id)
           continue
@@ -136,6 +138,7 @@ async function startRun(): Promise<void> {
           const functionArgs = JSON.parse(call.function.arguments)
           const fn = functions[call.function.name]
           if (!fn) {
+            runUpdate = 'Run encountered errors, restarting...'
             console.error('function name did not match accepted function arguments')
             return {
               tool_call_id: call.id ?? '',
@@ -147,8 +150,10 @@ async function startRun(): Promise<void> {
           // try calling the relevant function with arguments supplied by openai
           // if there is an error, update the output
           try {
+            runUpdate = 'Run successful, shapes are being created.'
             fn(functionArgs)
           } catch (err) {
+            runUpdate = 'Run encountered errors, restarting...'
             if (err instanceof Error) {
               fnStatus = err.toString()
             } else {
@@ -183,6 +188,8 @@ let shapes: Shape[] = []
 
 const users: Set<{ id: string; socket: Socket }> = new Set()
 
+let runUpdate = ''
+
 io.on('connection', async (socket: Socket) => {
   console.log('New user connected:', socket.id)
   socket.emit('snapshot', shapes)
@@ -199,6 +206,10 @@ io.on('connection', async (socket: Socket) => {
 
   socket.on('cursor-position', ({ x, y }) => {
     socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
+  })
+
+  socket.on('updates', async () => {
+    socket.emit('updates', runUpdate)
   })
 
   // receive a user message. this is the prompt that we'll send to the openai assistant along with some context.
