@@ -1,7 +1,13 @@
 'use client'
 import Chat from './Chat'
 
-export default function Header({ children }: { children?: React.ReactNode }) {
+export default function Header({
+  children,
+  updates,
+}: {
+  children?: React.ReactNode
+  updates: string
+}) {
   return (
     <div className=" w-screen border-b border-slate-600 z-10 bg-slate-900/90 absolute backdrop-blur">
       <div className="flex mx-auto max-w-7xl items-center px-6 pt-4 justify-between">
@@ -11,7 +17,10 @@ export default function Header({ children }: { children?: React.ReactNode }) {
         </h1>
         {children}
       </div>
-      <Chat />
+      <div className="flex items-center">
+        <Chat />
+        <div className="text-gray-400 text-sm">{updates}</div>
+      </div>
     </div>
   )
 }

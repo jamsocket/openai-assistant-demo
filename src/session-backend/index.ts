@@ -103,10 +103,10 @@ const functions: Record<string, (toolOutput: any) => void> = {
 }
 
 // a function that starts a run and continues to poll until relevant tasks are executed or fail
-async function startRun(): Promise<void> {
+async function startRun(socket: Socket): Promise<void> {
   return new Promise(async (resolve, reject) => {
     // create a run to process the message
-    const run = await openai.beta.threads.runs.create(thread.id, {
+    activeRun = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id,
     })
 
@@ -114,11 +114,12 @@ async function startRun(): Promise<void> {
 
     try {
       // get the run result
-      runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id)
+      runResult = await openai.beta.threads.runs.retrieve(thread.id, activeRun.id)
 
       const failedStatus = ['cancelled', 'failed', 'expired']
       if (failedStatus.includes(runResult?.status)) {
-        runUpdate = 'Run failed, please try again.'
+        activeRun = null
+        socket.emit('updates', `Run result failed with status: ${runResult.status}`)
         reject(new Error(`run result failed with status: ${runResult.status}`))
       }
 
@@ -127,9 +128,11 @@ async function startRun(): Promise<void> {
       while (pendingStatus.includes(runResult?.status)) {
         // poll the run every second if the run is still in progress
         if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-          runUpdate = 'Run is in progress.'
+          socket.emit('updates', `Run result is in progress`)
           await sleep(1000)
-          runResult = await openai.beta.threads.runs.retrieve(thread.id, run.id)
+          if (activeRun) {
+            runResult = await openai.beta.threads.runs.retrieve(thread.id, activeRun.id)
+          }
           continue
         }
 
@@ -138,7 +141,7 @@ async function startRun(): Promise<void> {
           const functionArgs = JSON.parse(call.function.arguments)
           const fn = functions[call.function.name]
           if (!fn) {
-            runUpdate = 'Run encountered errors, restarting...'
+            socket.emit('updates', `Run encountered errors, restarting...`)
             console.error('function name did not match accepted function arguments')
             return {
               tool_call_id: call.id ?? '',
@@ -150,10 +153,10 @@ async function startRun(): Promise<void> {
           // try calling the relevant function with arguments supplied by openai
           // if there is an error, update the output
           try {
-            runUpdate = 'Run successful, shapes are being created.'
+            socket.emit('updates', `Run successful, shapes are being created.`)
             fn(functionArgs)
           } catch (err) {
-            runUpdate = 'Run encountered errors, restarting...'
+            socket.emit('updates', `Run encountered errors, restarting...`)
             if (err instanceof Error) {
               fnStatus = err.toString()
             } else {
@@ -166,12 +169,15 @@ async function startRun(): Promise<void> {
           }
         })
 
-        // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
-        runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, run.id, {
-          tool_outputs: toolOutputs,
-        })
+        if (activeRun) {
+          // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
+          runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, activeRun.id, {
+            tool_outputs: toolOutputs,
+          })
+        }
       }
-
+      activeRun = null
+      socket.emit('updates', ``)
       resolve()
     } catch (error) {
       console.error('Error retrieving the run:', error)
@@ -188,7 +194,7 @@ let shapes: Shape[] = []
 
 const users: Set<{ id: string; socket: Socket }> = new Set()
 
-let runUpdate = ''
+let activeRun: OpenAI.Beta.Threads.Runs.Run | null = null
 
 io.on('connection', async (socket: Socket) => {
   console.log('New user connected:', socket.id)
@@ -208,10 +214,6 @@ io.on('connection', async (socket: Socket) => {
     socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
   })
 
-  socket.on('updates', async () => {
-    socket.emit('updates', runUpdate)
-  })
-
   // receive a user message. this is the prompt that we'll send to the openai assistant along with some context.
   socket.on('create-message', async (message) => {
     // structure the message with context on the existing whiteboard.
@@ -223,16 +225,18 @@ io.on('connection', async (socket: Socket) => {
     messageWithContext += JSON.stringify(shapes)
     messageWithContext +=
       ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
-    console.log('messageWithContext', messageWithContext)
 
-    // add a message to the thread
-    await openai.beta.threads.messages.create(thread.id, {
-      role: 'user',
-      content: message,
-    })
-
-    // a function that polls the run status and executes relevant tasks
-    await startRun()
+    if (activeRun === null) {
+      // add a message to the thread
+      await openai.beta.threads.messages.create(thread.id, {
+        role: 'user',
+        content: message,
+      })
+      // a function that polls the run status and executes relevant tasks
+      await startRun(socket)
+    } else {
+      socket.emit('updates', 'An earlier request is still running, cannot accept new messages.')
+    }
 
     // send updated shapes array to the client
     socket.emit('snapshot', shapes)

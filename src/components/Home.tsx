@@ -48,6 +48,7 @@ function Home() {
   })
 
   useEventListener<string>('updates', (updates) => {
+    console.log(updates)
     setUpdates(updates)
   })
 
@@ -61,7 +62,7 @@ function Home() {
 
   return (
     <main>
-      <Header>
+      <Header updates={updates}>
         <AvatarList users={users} />
       </Header>
       <Content>
