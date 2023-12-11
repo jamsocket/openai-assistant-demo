@@ -10,16 +10,18 @@ export default function Header({
 }) {
   return (
     <div className=" w-screen border-b border-slate-600 z-10 bg-slate-900/90 absolute backdrop-blur">
-      <div className="flex mx-auto max-w-7xl items-center px-6 pt-4 justify-between">
-        <h1 className="flex gap-4 font-light tracking-widest items-center text-md uppercase drop-shadow-lg text-slate-500">
-          <JamsocketLogo />
-          Whiteboard
-        </h1>
-        {children}
-      </div>
-      <div className="flex items-center">
-        <Chat />
-        <div className="text-gray-400 text-sm">{updates}</div>
+      <div className="mx-auto max-w-7xl px-6 pt-4">
+        <div className="flex items-center justify-between">
+          <h1 className="flex gap-4 font-light tracking-widest items-center text-md uppercase drop-shadow-lg text-slate-500">
+            <JamsocketLogo />
+            Whiteboard
+          </h1>
+          {children}
+        </div>
+        <div className="flex items-center">
+          <Chat canAcceptMessages={updates.length === 0} />
+          <div className="text-gray-400 text-sm ml-4">{updates}</div>
+        </div>
       </div>
     </div>
   )

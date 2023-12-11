@@ -48,7 +48,6 @@ function Home() {
   })
 
   useEventListener<string>('updates', (updates) => {
-    console.log(updates)
     setUpdates(updates)
   })
 

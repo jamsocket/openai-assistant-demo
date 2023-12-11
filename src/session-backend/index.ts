@@ -119,7 +119,7 @@ async function startRun(socket: Socket): Promise<void> {
       const failedStatus = ['cancelled', 'failed', 'expired']
       if (failedStatus.includes(runResult?.status)) {
         activeRun = null
-        socket.emit('updates', `Run result failed with status: ${runResult.status}`)
+        socket.emit('updates', `Process failed with status: ${runResult.status}`)
         reject(new Error(`run result failed with status: ${runResult.status}`))
       }
 
@@ -128,7 +128,7 @@ async function startRun(socket: Socket): Promise<void> {
       while (pendingStatus.includes(runResult?.status)) {
         // poll the run every second if the run is still in progress
         if (runResult?.status === 'in_progress' || runResult?.status === 'queued') {
-          socket.emit('updates', `Run result is in progress`)
+          socket.emit('updates', `Processing your request...`)
           await sleep(1000)
           if (activeRun) {
             runResult = await openai.beta.threads.runs.retrieve(thread.id, activeRun.id)
@@ -141,7 +141,7 @@ async function startRun(socket: Socket): Promise<void> {
           const functionArgs = JSON.parse(call.function.arguments)
           const fn = functions[call.function.name]
           if (!fn) {
-            socket.emit('updates', `Run encountered errors, restarting...`)
+            socket.emit('updates', `Process encountered errors, restarting...`)
             console.error('function name did not match accepted function arguments')
             return {
               tool_call_id: call.id ?? '',
@@ -153,10 +153,10 @@ async function startRun(socket: Socket): Promise<void> {
           // try calling the relevant function with arguments supplied by openai
           // if there is an error, update the output
           try {
-            socket.emit('updates', `Run successful, shapes are being created.`)
+            socket.emit('updates', `Shapes are being created.`)
             fn(functionArgs)
           } catch (err) {
-            socket.emit('updates', `Run encountered errors, restarting...`)
+            socket.emit('updates', `Process encountered errors, restarting...`)
             if (err instanceof Error) {
               fnStatus = err.toString()
             } else {
@@ -234,8 +234,6 @@ io.on('connection', async (socket: Socket) => {
       })
       // a function that polls the run status and executes relevant tasks
       await startRun(socket)
-    } else {
-      socket.emit('updates', 'An earlier request is still running, cannot accept new messages.')
     }
 
     // send updated shapes array to the client
