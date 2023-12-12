@@ -21,7 +21,7 @@ export default function Chat(props: ChatProps) {
         <input
           type="text"
           placeholder="Write a message..."
-          className="w-full px-4 py-2 bg-gray-600 caret-neutral-200 text-white text-sm rounded-lg"
+          className={`${canAcceptMessages ? "cursor-default" : "cursor-not-allowed"} w-full px-4 py-2 bg-gray-600 caret-neutral-200 text-white text-sm rounded-lg`}
           value={message}
           disabled={!canAcceptMessages}
           onChange={(e) => {

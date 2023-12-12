@@ -230,11 +230,18 @@ io.on('connection', async (socket: Socket) => {
       // add a message to the thread
       await openai.beta.threads.messages.create(thread.id, {
         role: 'user',
-        content: message,
+        content: messageWithContext,
       })
       // a function that polls the run status and executes relevant tasks
       await startRun(socket)
     }
+
+// move ai stuff to one place
+// rename create message - make that just to a call to start run with user prompt
+// rename start run to handle user prompt
+// move start run to the poll
+// move message to start run
+
 
     // send updated shapes array to the client
     socket.emit('snapshot', shapes)
