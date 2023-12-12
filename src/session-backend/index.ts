@@ -3,7 +3,7 @@ import type { Shape } from '../types'
 import OpenAI from 'openai'
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-if(!OPENAI_API_KEY) {
+if (!OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY is not set in the environment')
 }
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY })
@@ -65,46 +65,17 @@ const assistant = await openai.beta.assistants.create({
 // Create a thread for this user session
 const thread = await openai.beta.threads.create()
 
-// functions we call in pollRun depending on the required action by openai
-const functions: Record<string, (toolOutput: any) => void> = {
-  createShape(toolOutput: any) {
-    if (
-      !Number.isFinite(toolOutput?.x) ||
-      !Number.isFinite(toolOutput?.y) ||
-      !Number.isFinite(toolOutput?.w) ||
-      !Number.isFinite(toolOutput?.h)
-    ) {
-      throw new Error('required params were not given')
-    }
-    // create a new shape and add it to the shapes array
-    const generatedShape: Shape = {
-      x: toolOutput.x,
-      y: toolOutput.y,
-      w: toolOutput.w,
-      h: toolOutput.h,
-      color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
-      id: Math.floor(Math.random() * 100000),
-    }
-    shapes.push(generatedShape)
-  },
-  editExistingShape(toolOutput: any) {
-    // find the shape to update based on id
-    let editShape = shapes.find((shape) => shape.id === toolOutput.id)
-    if (!editShape) {
-      throw new Error('could not find shape')
-    }
-    // update the relevant parameters
-    editShape.x = toolOutput?.x ?? editShape.x
-    editShape.y = toolOutput?.y ?? editShape.y
-    editShape.w = toolOutput?.w ?? editShape.w
-    editShape.h = toolOutput?.h ?? editShape.h
-    editShape.color = toolOutput?.color ?? editShape.color
-  },
-}
-
 // a function that starts a run and continues to poll until relevant tasks are executed or fail
-async function startRun(socket: Socket): Promise<void> {
+async function handleUserPrompt(socket: Socket, message: string): Promise<void> {
   return new Promise(async (resolve, reject) => {
+    // structure the message with context on the existing whiteboard.
+    let messageWithContext = addMessageContext(message)
+
+    // add a message to the thread
+    await openai.beta.threads.messages.create(thread.id, {
+      role: 'user',
+      content: messageWithContext,
+    })
     // create a run to process the message
     activeRun = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id,
@@ -189,11 +160,13 @@ async function startRun(socket: Socket): Promise<void> {
 // Start a socket IO server that can be used to communicate between the client and server
 const io = new Server(8080, { cors: { origin: '*' } })
 
-// This shapes array will save the state of the whiteboard for a user session
+// shapes saves the state of the whiteboard for a user session
 let shapes: Shape[] = []
 
+// users array saves the state of active users
 const users: Set<{ id: string; socket: Socket }> = new Set()
 
+// activeRun is a variable used to check whether new messages can be processed or if an active run is already in place
 let activeRun: OpenAI.Beta.Threads.Runs.Run | null = null
 
 io.on('connection', async (socket: Socket) => {
@@ -210,39 +183,12 @@ io.on('connection', async (socket: Socket) => {
     newUser.socket.emit('user-entered', user.id)
   }
 
-  socket.on('cursor-position', ({ x, y }) => {
-    socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
-  })
-
   // receive a user message. this is the prompt that we'll send to the openai assistant along with some context.
-  socket.on('create-message', async (message) => {
-    // structure the message with context on the existing whiteboard.
-    let messageWithContext = ''
-    messageWithContext += 'This is the user request: '
-    messageWithContext += message
-    messageWithContext += ' '
-    messageWithContext += 'Here are the existing shapes in the whiteboard: '
-    messageWithContext += JSON.stringify(shapes)
-    messageWithContext +=
-      ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
-
+  socket.on('handle-user-prompt', async (message) => {
     if (activeRun === null) {
-      // add a message to the thread
-      await openai.beta.threads.messages.create(thread.id, {
-        role: 'user',
-        content: messageWithContext,
-      })
       // a function that polls the run status and executes relevant tasks
-      await startRun(socket)
+      await handleUserPrompt(socket, message)
     }
-
-// move ai stuff to one place
-// rename create message - make that just to a call to start run with user prompt
-// rename start run to handle user prompt
-// move start run to the poll
-// move message to start run
-
-
     // send updated shapes array to the client
     socket.emit('snapshot', shapes)
   })
@@ -262,6 +208,10 @@ io.on('connection', async (socket: Socket) => {
     socket.broadcast.emit('update-shape', shape)
   })
 
+  socket.on('cursor-position', ({ x, y }) => {
+    socket.volatile.broadcast.emit('cursor-position', { id: socket.id, cursorX: x, cursorY: y })
+  })
+
   socket.on('disconnect', () => {
     users.delete(newUser)
     socket.broadcast.emit('user-exited', newUser.id)
@@ -269,7 +219,57 @@ io.on('connection', async (socket: Socket) => {
 })
 
 async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
+}
+
+// functions we call in pollRun depending on the required action by openai
+const functions: Record<string, (toolOutput: any) => void> = {
+  createShape(toolOutput: any) {
+    if (
+      !Number.isFinite(toolOutput?.x) ||
+      !Number.isFinite(toolOutput?.y) ||
+      !Number.isFinite(toolOutput?.w) ||
+      !Number.isFinite(toolOutput?.h)
+    ) {
+      throw new Error('required params were not given')
+    }
+    // create a new shape and add it to the shapes array
+    const generatedShape: Shape = {
+      x: toolOutput.x,
+      y: toolOutput.y,
+      w: toolOutput.w,
+      h: toolOutput.h,
+      color: toolOutput?.color ?? `hsl(0, 0%, 0%)`,
+      id: Math.floor(Math.random() * 100000),
+    }
+    shapes.push(generatedShape)
+  },
+  editExistingShape(toolOutput: any) {
+    // find the shape to update based on id
+    let editShape = shapes.find((shape) => shape.id === toolOutput.id)
+    if (!editShape) {
+      throw new Error('could not find shape')
+    }
+    // update the relevant parameters
+    editShape.x = toolOutput?.x ?? editShape.x
+    editShape.y = toolOutput?.y ?? editShape.y
+    editShape.w = toolOutput?.w ?? editShape.w
+    editShape.h = toolOutput?.h ?? editShape.h
+    editShape.color = toolOutput?.color ?? editShape.color
+  },
+}
+
+function addMessageContext(message: string): string {
+  let messageWithContext = ''
+  messageWithContext += 'This is the user request: '
+  messageWithContext += message
+  messageWithContext += ' '
+  messageWithContext += 'Here are the existing shapes in the whiteboard: '
+  messageWithContext += JSON.stringify(shapes)
+  messageWithContext +=
+    ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
+
+  return messageWithContext
 }
