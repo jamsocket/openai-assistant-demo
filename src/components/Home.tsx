@@ -12,7 +12,6 @@ import {
   useSend,
 } from '@jamsocket/javascript/react'
 import type { SpawnResult } from '@jamsocket/javascript/types'
-import Chat from './Chat'
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
   return (

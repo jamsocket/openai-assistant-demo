@@ -124,7 +124,6 @@ async function handleUserPrompt(socket: Socket, message: string): Promise<void> 
           // try calling the relevant function with arguments supplied by openai
           // if there is an error, update the output
           try {
-            socket.emit('updates', `Shapes are being created.`)
             fn(functionArgs)
           } catch (err) {
             socket.emit('updates', `Process encountered errors, restarting...`)
