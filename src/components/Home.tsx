@@ -12,7 +12,6 @@ import {
   useSend,
 } from '@jamsocket/javascript/react'
 import type { SpawnResult } from '@jamsocket/javascript/types'
-import Chat from './Chat'
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
   return (
@@ -28,6 +27,7 @@ function Home() {
 
   const [shapes, setShapes] = useState<Shape[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [updates, setUpdates] = useState('')
 
   useEventListener<string>('user-entered', (id) => {
     const newUser = { cursorX: null, cursorY: null, id }
@@ -43,8 +43,11 @@ function Home() {
   })
 
   useEventListener<Shape[]>('snapshot', (shapes) => {
-    console.log('snapshot', shapes)
     setShapes(shapes)
+  })
+
+  useEventListener<string>('updates', (updates) => {
+    setUpdates(updates)
   })
 
   useEventListener<Shape>('update-shape', (shape) => {
@@ -57,7 +60,7 @@ function Home() {
 
   return (
     <main>
-      <Header>
+      <Header updates={updates}>
         <AvatarList users={users} />
       </Header>
       <Content>
