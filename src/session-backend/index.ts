@@ -275,6 +275,6 @@ function addMessageContext(message: string): string {
 
   ${JSON.stringify(shapes, null, 2)}
 
-  You are a helpful AI Assistant whose job is to help your users create and edit shapes on a canvas based on their instructions. The canvas is a 2D plane with an x and y axis. The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right). [0, 0] is in the middle of the screen.
+  Remember, the y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right). [0, 0] is in the middle of the screen.
   `
 }
