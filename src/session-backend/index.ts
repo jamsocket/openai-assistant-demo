@@ -7,59 +7,13 @@ if (!OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY is not set in the environment')
 }
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY })
-
 // Create an assistant
 // In the tools parameter, I am supplying an array of tools with a specific JSON structure
 const assistant = await openai.beta.assistants.create({
   instructions:
-    'You are a bot that draws rectangles on a whiteboard. You will receive instructions for where to draw the rectangle and how large a rectangle to draw. Use the function createShape to draw a rectangle on the whiteboard. Note that [0, 0] is in the middle of the screen.',
+    'You are a helpful AI Assistant whose job is to help your users create and edit shapes on a canvas based on their instructions. The canvas is a 2D plane with an x and y axis. The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right). [0, 0] is in the middle of the screen',
   model: 'gpt-4-1106-preview',
-  tools: [
-    {
-      type: 'function',
-      function: {
-        name: 'createShape',
-        description: 'Create a rectangle in a whiteboard',
-        parameters: {
-          type: 'object',
-          properties: {
-            x: { type: 'number', description: 'x position' },
-            y: { type: 'number', description: 'y position' },
-            w: { type: 'number', description: 'width of rectangle' },
-            h: { type: 'number', description: 'height of rectangle' },
-            color: {
-              type: 'string',
-              description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
-            },
-          },
-          required: ['x', 'y', 'w', 'h'],
-        },
-      },
-    },
-    {
-      type: 'function',
-      function: {
-        name: 'editExistingShape',
-        description:
-          'Updates the properties for a shape given its id. For example, if the shape array looks like this [{id: 1234, x: 0, y: 0, color: `hsl(0, 0%, 0%)`}] and my user request is to move this shape to the left, I should return {id: 1234, x: -10}',
-        parameters: {
-          type: 'object',
-          properties: {
-            id: { type: 'number', description: 'the id of the existing shape to edit' },
-            x: { type: 'number', description: 'x position' },
-            y: { type: 'number', description: 'y position' },
-            w: { type: 'number', description: 'width of rectangle' },
-            h: { type: 'number', description: 'height of rectangle' },
-            color: {
-              type: 'string',
-              description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
-            },
-          },
-          required: ['id'],
-        },
-      },
-    },
-  ],
+  tools: getWhiteboardTools(),
 })
 
 // Create a thread for this user session
@@ -120,11 +74,12 @@ async function handleUserPrompt(socket: Socket, message: string): Promise<void> 
             }
           }
 
-          let fnStatus = 'success'
+          let fnStatus = ''
           // try calling the relevant function with arguments supplied by openai
           // if there is an error, update the output
           try {
             fn(functionArgs)
+            fnStatus = 'Success. New shapes array: ' + JSON.stringify(shapes)
           } catch (err) {
             socket.emit('updates', `Process encountered errors, restarting...`)
             if (err instanceof Error) {
@@ -140,14 +95,14 @@ async function handleUserPrompt(socket: Socket, message: string): Promise<void> 
         })
 
         if (activeRun) {
-          // send the tool outputs to openai, which will restart a run if there were errors or complete the run if it was successful
+          // send the tool outputs to openai
           runResult = await openai.beta.threads.runs.submitToolOutputs(thread.id, activeRun.id, {
             tool_outputs: toolOutputs,
           })
         }
       }
       activeRun = null
-      socket.emit('updates', ``)
+      socket.emit('updates', '')
       resolve()
     } catch (error) {
       console.error('Error retrieving the run:', error)
@@ -159,10 +114,10 @@ async function handleUserPrompt(socket: Socket, message: string): Promise<void> 
 // Start a socket IO server that can be used to communicate between the client and server
 const io = new Server(8080, { cors: { origin: '*' } })
 
-// shapes saves the state of the whiteboard for a user session
+// shapes holds the state of the whiteboard for a user session
 let shapes: Shape[] = []
 
-// users array saves the state of active users
+// users array holds the state of active users
 const users: Set<{ id: string; socket: Socket }> = new Set()
 
 // activeRun is a variable used to check whether new messages can be processed or if an active run is already in place
@@ -223,6 +178,56 @@ async function sleep(ms: number): Promise<void> {
   })
 }
 
+// Whiteboard functions that the Assistant can call
+function getWhiteboardTools(): OpenAI.Beta.Assistants.AssistantCreateParams.AssistantToolsFunction[] {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'createShape',
+        description: 'Create a rectangle in a whiteboard',
+        parameters: {
+          type: 'object',
+          properties: {
+            x: { type: 'number', description: 'x position' },
+            y: { type: 'number', description: 'y position' },
+            w: { type: 'number', description: 'width of rectangle' },
+            h: { type: 'number', description: 'height of rectangle' },
+            color: {
+              type: 'string',
+              description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
+            },
+          },
+          required: ['x', 'y', 'w', 'h'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'editExistingShape',
+        description:
+          'Updates the properties for a shape given its id. For example, if the shape array looks like this [{id: 1234, x: 0, y: 0, color: `hsl(0, 0%, 0%)`}] and my user request is to move this shape to the left, I should return {id: 1234, x: -10}',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'number', description: 'the id of the existing shape to edit' },
+            x: { type: 'number', description: 'x position' },
+            y: { type: 'number', description: 'y position' },
+            w: { type: 'number', description: 'width of rectangle' },
+            h: { type: 'number', description: 'height of rectangle' },
+            color: {
+              type: 'string',
+              description: "hsl(_, _%, _%) if a color isn't specified, just use black.",
+            },
+          },
+          required: ['id'],
+        },
+      },
+    },
+  ]
+}
+
 // functions we call in pollRun depending on the required action by openai
 const functions: Record<string, (toolOutput: any) => void> = {
   createShape(toolOutput: any) {
@@ -261,14 +266,15 @@ const functions: Record<string, (toolOutput: any) => void> = {
 }
 
 function addMessageContext(message: string): string {
-  let messageWithContext = ''
-  messageWithContext += 'This is the user request: '
-  messageWithContext += message
-  messageWithContext += ' '
-  messageWithContext += 'Here are the existing shapes in the whiteboard: '
-  messageWithContext += JSON.stringify(shapes)
-  messageWithContext +=
-    ' The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right).'
+  return `\
+  This is the user's request:
 
-  return messageWithContext
+  ${message}.
+
+  These are the current shapes on the canvas:
+
+  ${JSON.stringify(shapes, null, 2)}
+
+  You are a helpful AI Assistant whose job is to help your users create and edit shapes on a canvas based on their instructions. The canvas is a 2D plane with an x and y axis. The y axis goes from negative (top) to positive (bottom). The x axis goes from negative (left) to positive (right). [0, 0] is in the middle of the screen.
+  `
 }
