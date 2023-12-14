@@ -3,6 +3,7 @@
 A shared canvas built with the OpenAI Assistant, powered by Jamsocket's session backends.
 
 ## Tools you'll need
+
 - [OpenAI API](https://platform.openai.com/docs/overview)
 - [Jamsocket](https://jamsocket.com/)
 - [Docker](https://www.docker.com/products/docker-desktop/)
@@ -17,6 +18,7 @@ A shared canvas built with the OpenAI Assistant, powered by Jamsocket's session 
 6. Make sure Docker is running with `docker ps`
 
 ## Running the app
+
 1. Spawn a backend with `npx jamsocket@latest dev`
 2. Run the frontend with `npm run dev`
 3. Navigate to `localhost:3000`
