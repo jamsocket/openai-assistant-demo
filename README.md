@@ -1,6 +1,7 @@
 # openai-assistant-demo
 
-https://github.com/drifting-in-space/openai-assistant-demo/assets/34881756/af97674f-34c9-4e30-9ba1-eb502993c0ce
+![Assistant Demo Gif](https://github.com/drifting-in-space/openai-assistant-demo/assets/34881756/0a375c67-aa5f-406f-b31b-921896cf5dce)
+
 
 A shared canvas built with the OpenAI Assistant, powered by Jamsocket's session backends.
 
