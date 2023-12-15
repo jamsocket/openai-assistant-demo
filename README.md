@@ -1,5 +1,7 @@
 # openai-assistant-demo
 
+https://github.com/drifting-in-space/openai-assistant-demo/assets/34881756/af97674f-34c9-4e30-9ba1-eb502993c0ce
+
 A shared canvas built with the OpenAI Assistant, powered by Jamsocket's session backends.
 
 ## Tools you'll need
