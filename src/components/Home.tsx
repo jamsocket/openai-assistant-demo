@@ -5,18 +5,16 @@ import Header from './Header'
 import Content from './Content'
 import { AvatarList, Spinner, Whiteboard } from './Whiteboard'
 import type { Shape, User } from '../types'
-import {
-  SessionBackendProvider,
-  useEventListener,
-  useReady,
-  useSend,
-} from '@jamsocket/javascript/react'
+import { SessionBackendProvider, useReady, } from '@jamsocket/javascript/react'
+import { SocketIOProvider, useEventListener, useSend} from '@jamsocket/javascript/socketio'
 import type { SpawnResult } from '@jamsocket/javascript/types'
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
   return (
     <SessionBackendProvider spawnResult={spawnResult}>
-      <Home />
+      <SocketIOProvider url={spawnResult.url}>
+        <Home />
+      </SocketIOProvider>
     </SessionBackendProvider>
   )
 }
