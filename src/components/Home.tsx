@@ -6,7 +6,7 @@ import Content from './Content'
 import { AvatarList, Spinner, Whiteboard } from './Whiteboard'
 import type { Shape, User } from '../types'
 import { SessionBackendProvider, useReady, } from '@jamsocket/javascript/react'
-import { SocketIOProvider, useEventListener, useSend} from '@jamsocket/javascript/socketio'
+import { SocketIOProvider, useEventListener, useSend } from '@jamsocket/javascript/socketio'
 import type { SpawnResult } from '@jamsocket/javascript/types'
 
 export default function HomeContainer({ spawnResult }: { spawnResult: SpawnResult }) {
