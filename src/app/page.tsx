@@ -1,6 +1,6 @@
 import 'server-only'
 import HomeContainer from '../components/Home'
-import Jamsocket from '@jamsocket/javascript/server'
+import Jamsocket from '@jamsocket/server'
 
 const WHITEBOARD_NAME = 'openai-assistant-demo/default'
 const OPENAI_API_KEY = '[YOUR OPENAI_API_KEY HERE]'
