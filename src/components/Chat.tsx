@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useSend } from '@jamsocket/javascript/react'
+import { useSend } from '@jamsocket/socketio'
 
 interface ChatProps {
   canAcceptMessages: boolean
